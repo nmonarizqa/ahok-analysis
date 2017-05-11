@@ -14,4 +14,6 @@ Method:
 Result:
 Yes, indeed people are becoming more polarized
 
+![kde plot](https://github.com/nmonarizqa/ahok-analysis/blob/master/pics/kde%20post.png)
+
 
