@@ -1,0 +1,353 @@
+---
+title: "Exloratory 2 with islamnkri"
+author: "Nurvirta Monarizqa (nm2773)"
+date: "April 29, 2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+libs <- c("ldatuning","topicmodels","ggplot2","dplyr","rjson","quanteda","lubridate","parallel","doParallel","tidytext", "quantedaData", "tm", "reshape2", "lsa", "bursts", "readtext", "stringi")
+library("katadasaR")
+lapply(libs, library, character.only = T)
+
+setwd("C:/Users/Nurvirta/OneDrive/CUSP/Spring/TAD/final paper")
+id_stopwords <- scan("stopwords.txt", what="", sep="\n")
+rm(libs)
+```
+
+
+```{r}
+bursty<-function(word="sioux",DTM, date, title){
+  word.vec <- DTM[,which(colnames(DTM) == word)]
+  if(length(word.vec) == 0){
+    print(word, " does not exist in this corpus.")
+  } else{
+    word.times <- c(0,which(as.vector(word.vec)>0))
+    kl <- kleinberg(word.times, gamma=.5)
+    kl$start <- date[kl$start+1]
+    kl$end <- date[kl$end]
+    max_level <- max(kl$level)
+    plot(c(kl$start[1], kl$end[1]), c(1,max_level),
+         type = "n", xlab = "", ylab = "Level", bty = "n",
+         xlim = c(kl$start[1], kl$end[1]), ylim = c(1, max_level),
+         yaxt = "n")
+    axis(2, at = 1:max_level)
+    title(title)
+    for(i in 1:nrow(kl)){
+      if(kl$start[i] != kl$end[i]){
+        arrows(kl$start[i], kl$level[i], kl$end[i], kl$level[i], code = 3, angle = 90,
+               length = 0.05, lwd=3)
+      } else{
+        points(kl$start[i], kl$level[i])
+      }
+    }
+    abline(v=as.Date("2016-09-30"), col="red", lty=2, lwd=3)
+    print(kl)
+  }
+    #note deviation from standard defaults bec don't have that much data
+}
+```
+
+```{r create_corpus}
+
+create_corpus_dfm <- function(media){
+  setwd(paste("C:/Users/Nurvirta/OneDrive/CUSP/Spring/TAD/final paper/",media, sep=""))
+  the_corpus <- readtext("*.txt", docvarsfrom=c("filenames"))
+  the_corpus <- corpus(the_corpus)
+  for(i in 1:length(docvars(the_corpus)$date)){
+    the_corpus$documents$texts[i] <- iconv(the_corpus$documents$texts[i], "UTF-8", "ASCII", sub = "")
+  }
+  docvars(the_corpus)$date <- as.Date(stri_sub(docvars(the_corpus)$docvar1, 1, 10))
+  docvars(the_corpus)$source <- media
+  
+  # docvars(seword)$texts <- sapply(docvars(seword)$texts, katadasaR)
+  the_dfm <- dfm(the_corpus, removePunct=T, remove = id_stopwords)
+  return(list(the_corpus, the_dfm))
+}
+
+bursty_plots<-function(the_dfm, the_corpus){
+  bursty("maidah",the_dfm,docvars(the_corpus)$date, "Al-maidah (the verse)")
+  bursty("penistaan",the_dfm,docvars(the_corpus)$date, "Blasphemy")
+  bursty("agama",the_dfm,docvars(the_corpus)$date, "Religion")
+  bursty("cina",the_dfm,docvars(the_corpus)$date, "Chinese")
+  bursty("anies",the_dfm,docvars(the_corpus)$date, "Anies")
+  bursty("ahok",the_dfm,docvars(the_corpus)$date, "Ahok")
+}
+
+
+```
+
+
+```{r bursty_positives}
+sw <- create_corpus_dfm("all_positive")
+positive <- sw[1][[1]]
+positive_dfm <- sw[2][[1]]
+bursty_plots(positive_dfm, positive)
+```
+
+```{r bursty_piyungan}
+sw <- create_corpus_dfm("piyungan")
+piyungan <- sw[1][[1]]
+piyungan_dfm <- sw[2][[1]]
+bursty_plots(piyungan_dfm, piyungan)
+```
+
+
+```{r bursty_kompasiana}
+sw <- create_corpus_dfm("kompasiana")
+kompasiana <- sw[1][[1]]
+kompasiana_dfm <- sw[2][[1]]
+bursty_plots(kompasiana_dfm, kompasiana)
+```
+
+
+# ALL CORPUS
+
+```{r merge_corpus}
+all.corpus <- positive + piyungan + kompasiana
+all.dfm <- dfm(all.corpus, removePunct=T, remove = id_stopwords)
+```
+
+```{r}
+head(all.dfm)
+```
+
+```{r trim_corpus}
+all.trim <- dfm_trim(all.dfm, min_count = 0.001, min_docfreq = 0.01)
+tail(all.trim)
+#write.csv(all.trim, file = "all_trim.csv")
+```
+```{r LDA}
+k <-20
+
+# Run the topic model 
+TM <-LDA(all.trim, k = k, method = "Gibbs",  control = list(seed = 10012, iter=1000)) 
+```
+
+```{r get_top_terms}
+top_terms <- get_terms(TM, 10)
+t(top_terms)
+```
+```{r topic_allocation}
+at <- TM %>% get_topics 
+head(-1*sort(-table(at)), 10)
+write.csv(TM@gamma, file = "topic_allocation_2.csv")
+```
+```{r create_tile_graph}
+doc_topics<-TM@gamma
+cont <- data.frame(source=all.corpus$documents$source, doc_topics)
+average_cont <- aggregate(cont[, 2:21], list(all.corpus$documents$source), mean)
+average_cont <- average_cont[,c("Group.1","X19","X10","X1","X20","X5")]
+colnames(average_cont) <- c("news source", "411 rally","the election in general","party discussion","the blasphemy","blasphemy trial")
+average_cont <- setNames(melt(average_cont), c("sources","topics","values"))
+ggplot(dat = average_cont, aes(x=sources, y=topics)) + geom_tile(aes(fill=values), color="white") + scale_fill_gradient(low="white", high="red")
+```
+
+
+```{r select_topics}
+df <- data.frame(id=names(topics(TM)),                 
+                 week=floor((all.corpus$documents$date - as.Date("2016-09-30"))/7) + 1,
+                 source=all.corpus$documents$source, stringsAsFactors = TRUE)
+
+dft <- cbind(df,posterior(TM)$topics)
+
+M <- gather(dft,topic,value,-id,-week,-source) %>%
+  group_by(topic,week,source) %>%
+  summarize(value=mean(value))
+M<-subset(M, (topic %in% c("19","10","1", "20", "5")))
+M$topic <- factor(M$topic)
+levels(M$topic) <- c("party discussion", "election in general", "411 rally","the blasphemy","blasphemy trial")
+
+
+ggplot(M,aes(x=week,color=source,y=value)) + 
+  geom_point() +
+  geom_line() +
+  geom_vline(xintercept = 0) +
+  facet_grid(topic~source)
+```
+
+```{r stm}
+sp <- positive + piyungan
+sp.dfm <- dfm(sp, removePunct=T, remove = id_stopwords)
+gt.dfm <- convert(sp.dfm, to="stm")
+gt.meta <-  data.frame(source=sp$documents$source, 
+                       date= as.numeric(sp$documents$date - as.Date("2016-06-30")), 
+                       text=sp$documents$texts)
+library("stm")
+prep <- prepDocuments(gt.dfm$documents,gt.dfm$vocab,gt.meta,lower.thresh=30)
+heldout <- make.heldout(prep$documents, prep$vocab)
+documents <- heldout$documents
+vocab <- heldout$vocab
+meta <- prep$meta
+```
+```{r}
+length(meta$source[meta$source=="all_positive"])
+levels(meta$source)
+```
+
+
+```{r, include=FALSE}
+stm40 <- stm(documents=documents, vocab=vocab, K=40, seed=2017,
+            prevalence=~source + s(date), data=meta, init.type="Spectral")
+```
+
+```{r top_topics}
+plot(stm40, type="summary", text.cex = 0.7)
+```
+
+
+```{r select_topics2}
+selected_topics <- c(23,37,33,38,39,9,7,1,3,36,14)
+# cust_labels <- c("The blasphemy",
+#                  "Pre-election",
+#                  "Nationalism",
+#                  "protest rally",
+#                  "The election",
+#                  "Ahok policies",
+#                  "Chinese ethnicity",
+#                  "Blaming Ahok",
+#                  "Blasphemy trial")
+cust_labels <- c("The Blasphemy",
+                 "Parties discussion",
+                 "Ahok's Policy",
+                 "Protest Rally",
+                 "The election",
+                 "Politics (general)",
+                 "Nationalism",
+                 "Ahok trial",
+                 "Tolerance",
+                 "prohibition to elect non-muslim leaders",
+                 "MUI's fatwa")
+labelTopics(stm40, selected_topics)
+```
+
+```{r estimate_effect}
+prep1 <- estimateEffect(1:40 ~ source + s(date), stm40, meta = meta)
+
+
+
+plot(prep1, covariate = "source", topics = selected_topics,
+     model = stm1, method = "difference",
+     cov.value1 = "piyungan", cov.value2 = "all_positive",
+     xlab = "Piyungan                                             Seword",
+     main = "Piyungan vs Seword+IslamNKRI",
+     labeltype = "custom",
+     custom.labels = cust_labels)
+#     )
+
+levels(meta$source)
+```
+```{r}
+plot(stm40, type = "perspectives", topics = 1,
+     cov.value1 = "piyungan", cov.value2 = "seword")
+```
+
+```{r}
+doc_topics <- t(stm40$theta)
+max<- apply(doc_topics, 2, which.max)
+head(max)
+sp$documents$topics <- max
+```
+
+# NAIVE BAYES 1
+
+```{r}
+selected_sp <- corpus_subset(sp, topics %in% selected_topics)
+dim(selected_sp$documents)
+print(sum(selected_sp$documents$source=="all_positive"))
+print(sum(selected_sp$documents$source=="piyungan"))
+```
+```{r naivebayes}
+id_stopwords2 <- c(id_stopwords, "pkspiyungan.com", "[pkspiyungan.com]","piyungan","seword")
+NBdfm<- dfm(selected_sp, removePunct=T, remove = id_stopwords2)
+
+naive_bayes_rep <- function(NBdfm, n){
+  accs = vector()
+  recs = vector()
+  precs = vector()
+  
+  for(i in 1:n){
+
+    label_NB<-factor(selected_sp$documents$source)
+    
+    sample_index <- sample(1:length(label_NB), 0.8*length(label_NB), replace=FALSE)
+    
+    label_NB[sample_index]<-NA
+    
+    true_label<-factor(selected_sp$documents$source)
+    NBmodel <- textmodel_NB(NBdfm, label_NB,   smooth=1, priors="docfreq")
+
+    # Predict: Uniform Priors
+    NBpredict <- predict(NBmodel, newdata = NBdfm[is.na(label_NB),])
+    tab2 <- table(true_label[is.na(label_NB)], as.numeric(NBpredict$posterior.prob[,1] >
+                                                            NBpredict$posterior.prob[,2]))
+    
+    acc2<- sum(diag(tab2))/sum(tab2) # (TP + TN) / (TP + FP + TN + FN)
+    recall2<-tab2[2,2]/sum(tab2[2,]) # TP / (TP + FN)
+    precision2<-tab2[2,2]/sum(tab2[,2]) # TP / (TP + FP)
+    
+    accs <- c(accs, acc2)
+    recs <- c(recs, recall2)
+    precs <- c(precs, precision2)
+  }
+  print(mean(accs))
+  print(mean(recs))
+  print(mean(precs))
+  return(NBpredict)
+}
+```
+
+
+```{r}
+NBpredict1 <- naive_bayes_rep(NBdfm, 10)
+```
+
+```{r}
+NBcorpus <- selected_sp + kompasiana
+NBdfm<- dfm(NBcorpus, removePunct=T, remove = id_stopwords2)
+label_NB<- NBcorpus$documents$source
+label_NB <- gsub("kompasiana", NA, label_NB)
+head(label_NB)
+
+NBmodel <- textmodel_NB(NBdfm, label_NB,   smooth=1, priors="docfreq")
+NBpredict <- predict(NBmodel, newdata = NBdfm[is.na(label_NB),])
+sum(as.numeric(NBpredict$posterior.prob[,1] >                                                       NBpredict$posterior.prob[,2]))
+
+write.csv(NBpredict$posterior.prob, "theprobs_nkri.csv")
+
+head(NBpredict$posterior.prob[,1])
+```
+
+# NAIVE BAYES 2
+
+```{r}
+selected_topics2<- c(23,38,7,1,3,36,14)
+selected_sp <- corpus_subset(sp, topics %in% selected_topics2)
+dim(selected_sp$documents)
+print(sum(selected_sp$documents$source=="all_positive"))
+print(sum(selected_sp$documents$source=="piyungan"))
+```
+```{r}
+id_stopwords2 <- c(id_stopwords, "pkspiyungan.com", "[pkspiyungan.com]","piyungan","seword")
+NBdfm<- dfm(selected_sp, removePunct=T, remove = id_stopwords2)
+NBpredict2 <- naive_bayes_rep(NBdfm, 10)
+```
+
+```{r}
+NBcorpus <- selected_sp + kompasiana
+NBdfm<- dfm(NBcorpus, removePunct=T, remove = id_stopwords2)
+label_NB<- NBcorpus$documents$source
+label_NB <- gsub("kompasiana", NA, label_NB)
+head(label_NB)
+
+NBmodel <- textmodel_NB(NBdfm, label_NB,   smooth=1, priors="uniform")
+NBpredict <- predict(NBmodel, newdata = NBdfm[is.na(label_NB),])
+sum(as.numeric(NBpredict$posterior.prob[,1] >                                                       NBpredict$posterior.prob[,2]))
+
+write.csv(NBpredict$posterior.prob, "theprobs_nkri2.csv")
+
+head(NBpredict$posterior.prob[,1])
+```
+
