@@ -12,4 +12,6 @@ Method:
 - naive bayes
 
 Result:
-jdnasm;c x
+Yes, indeed people are becoming more polarized
+
+
