@@ -1,6 +1,6 @@
 # ahok-analysis
 
-A study about what people are saying, how they are polarized, during Ahok blasphemy event
+A study about people opinions and how they are polarized during Ahok blasphemy event.
 
 Media sources:
 - Heavily polarized media: seword, islamnkri, portal-islam (pkspiyungan)
@@ -12,6 +12,7 @@ Method:
 - naive bayes
 
 Result:
+
 Yes, indeed people are becoming more polarized
 
 ![kde plot](https://github.com/nmonarizqa/ahok-analysis/blob/master/pics/kde%20post.png)
