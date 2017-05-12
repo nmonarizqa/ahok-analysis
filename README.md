@@ -1,6 +1,6 @@
 # ahok-analysis
 
-A study about people opinions and how they are polarized during Ahok blasphemy event.
+A study about people opinions and how they are polarized during Ahok blasphemy event. This is a final project for Text As Data Course, Center for Data Science, NYU, Spring 2017
 
 Media sources:
 - Heavily polarized media: seword, islamnkri, portal-islam (pkspiyungan)
